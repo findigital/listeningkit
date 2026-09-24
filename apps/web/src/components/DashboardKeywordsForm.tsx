@@ -16,6 +16,7 @@ import {
   resolveRedditCommunity,
   type Community
 } from '../lib/communities'
+import { getEnabledPlatforms } from '../lib/platformConfig'
 import { SOCIAL_ICONS, SocialBadge, SocialGlyph, type SocialIcon } from '../lib/social-icons'
 import { DashboardFormSheet } from './DashboardFormSheet'
 import { EmptyLine, FormInput, LoadingLine, PickRow, PlatformPick } from './DashboardFormPrimitives'
@@ -61,6 +62,7 @@ export function DashboardKeywordsForm({
 }) {
   const { success, error: notifyError } = useToast()
   const editing = initialKeyword ?? null
+  const enabledPlatforms = getEnabledPlatforms()
   const [platform, setPlatform] = useState<ConnectionPlatform | null>(null)
   // Selecting a platform tile only marks the card — the sheet's Continue
   // button flips this and unlocks the next step, so step one never
@@ -532,6 +534,7 @@ export function DashboardKeywordsForm({
       {step === 1 ? (
         <PlatformPick
           value={platform}
+          platforms={enabledPlatforms as ConnectionPlatform[]}
           onChange={(next) => {
             setPlatform(next)
             setJoinedGroups(null)

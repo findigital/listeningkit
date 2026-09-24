@@ -11,6 +11,7 @@ import { normalizePushedPost, type NormalizedPost } from './lib/posts'
 import { mayRead, proxyState } from './lib/proxy'
 import { handleMcp } from './lib/mcp'
 import { hasScope, type Scope } from './lib/scopes'
+import { isPlatformEnabled } from './lib/platformConfig'
 import { DEFAULT_MATCHES_PER_PAGE, MAX_MATCHES_PER_PAGE } from './publicApi'
 
 const PLATFORMS = ['facebook', 'x', 'reddit'] as const
@@ -35,6 +36,8 @@ http.route({
     if (typeof input !== 'object' || input === null) return json({ error: 'Expected a JSON object' }, 400)
     const { platform, posts } = input as { platform?: unknown; posts?: unknown }
     if (!PLATFORMS.includes(platform as Platform)) return json({ error: 'platform must be facebook, x, or reddit' }, 400)
+    // Check if this platform is enabled on this deployment
+    if (!isPlatformEnabled(platform as Platform)) return json({ error: `${platform} is not enabled on this deployment` }, 403)
     if (!Array.isArray(posts) || posts.length < 1 || posts.length > MAX_POSTS_PER_BATCH) {
       return json({ error: `posts must be an array of 1-${MAX_POSTS_PER_BATCH} items` }, 400)
     }
@@ -62,6 +65,8 @@ http.route({
     if (!secret) return json({ error: 'Authentication required' }, 401)
     const platform = new URL(req.url).searchParams.get('platform')
     if (!PLATFORMS.includes(platform as Platform)) return json({ error: 'platform must be facebook, x, or reddit' }, 400)
+    // Check if this platform is enabled on this deployment
+    if (!isPlatformEnabled(platform as Platform)) return json({ error: `${platform} is not enabled on this deployment` }, 403)
     try {
       const sealed = await ctx.runQuery(internal.sessions.sealedForKey, { keyHash: await sha256Hex(secret), platform: platform as Platform })
       if (!sealed) return json({ error: `No ${platform} account is connected` }, 404)
@@ -83,6 +88,8 @@ http.route({
     if (!secret) return json({ error: 'Authentication required' }, 401)
     const platform = new URL(req.url).searchParams.get('platform')
     if (!PLATFORMS.includes(platform as Platform)) return json({ error: 'platform must be facebook, x, or reddit' }, 400)
+    // Check if this platform is enabled on this deployment
+    if (!isPlatformEnabled(platform as Platform)) return json({ error: `${platform} is not enabled on this deployment` }, 403)
     try {
       const phrases = await ctx.runQuery(internal.keywords.forKey, { keyHash: await sha256Hex(secret), platform: platform as Platform })
       return json({ platform, phrases }, 200)

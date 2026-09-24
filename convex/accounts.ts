@@ -1,5 +1,6 @@
 import { ConvexError, v } from 'convex/values'
 import { accountLimitMessage, atLimit, planLimits } from './lib/plan'
+import { isPlatformEnabled, platformDisabledMessage } from './lib/platformConfig'
 import { mutation, query, requireOwner, type MutationCtx } from './lib/server'
 import { platform } from './schema'
 
@@ -18,6 +19,10 @@ export const list = query({
 
 const createArgs = { platform, label: v.string() }
 async function insertAccount(ctx: MutationCtx, args: { platform: 'facebook' | 'x' | 'reddit'; label: string }) {
+  // Check if this platform is enabled on this deployment
+  if (!isPlatformEnabled(args.platform)) {
+    throw new ConvexError(platformDisabledMessage(args.platform))
+  }
   const owner = await requireOwner(ctx)
   const label = args.label.trim()
   if (!label || label.length > 120) throw new ConvexError('Label must contain 1-120 characters')
