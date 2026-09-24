@@ -6,12 +6,11 @@ import { ConvexError } from 'convex/values'
 import type { Doc, Id } from '../_generated/dataModel'
 import { ensureAccount } from './accounts'
 import { atLimit, phraseLimitMessage, planLimits } from './plan'
+import { isPlatformEnabled, platformDisabledMessage, type Platform } from './platformConfig'
 import type { MutationCtx } from './server'
 
 export const MAX_KEYWORDS = 50
 const SUBREDDIT = /^[A-Za-z0-9_]{1,21}$/
-
-type Platform = 'facebook' | 'x' | 'reddit'
 
 export function publicKeyword(row: {
   _id: string; _creationTime: number; phrase: string; platform: Platform
@@ -29,6 +28,10 @@ export function publicKeyword(row: {
 export async function createKeywordCore(
   ctx: MutationCtx, owner: string, args: { phrase: string; platform: Platform; subreddit?: string },
 ): Promise<Doc<'keywords'>> {
+  // Check if this platform is enabled on this deployment
+  if (!isPlatformEnabled(args.platform)) {
+    throw new ConvexError(platformDisabledMessage(args.platform))
+  }
   const phrase = args.phrase.trim().replace(/\s+/g, ' ')
   if (phrase.length < 2 || phrase.length > 100) throw new ConvexError('A phrase needs 2-100 characters')
   let subreddit: string | undefined

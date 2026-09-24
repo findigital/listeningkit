@@ -6,6 +6,7 @@ import { describeExpiry, saveSession, sessionsOnConvex, tokenPlatform } from '@/
 import { SOCIAL_ICONS, SocialGlyph } from '@/lib/social-icons'
 import { extractBrandFromUrl, getBrand, saveBrand, skippedBrand, type BrandEntity } from '@/lib/brand'
 import { applyWebsiteFacts, brandOnConvex, notSignedInYet, readingIsOff, readWebsite } from '@/lib/live-brand'
+import { getEnabledPlatforms, needsExtensionStep } from '@/lib/platformConfig'
 import { BrandRevealStep } from '@/components/onboarding/BrandRevealStep'
 import { FunnelVideo } from '@/components/FunnelVideo'
 import { ReadyFill } from '@/components/ReadyFill'
@@ -14,9 +15,9 @@ import { readAuthSource, saveAuthSource, clearAuthSource, clearLandingWebsite, r
 import { websiteError } from '@/lib/website'
 
 /**
- * Step order: 0 website → 1 brand reveal → 2 extension install → 3 platforms
- * → 4 connect tokens → 5 ready. Sign-in/sign-up is a route redirect between
- * the extension and platform steps, never a step itself.
+ * Step order: 0 website → 1 brand reveal → 2 extension install (optional, hidden for Reddit-only)
+ * → 3 platforms → 4 connect tokens (optional, skipped when no platforms need tokens) → 5 ready.
+ * Sign-in/sign-up is a route redirect between the extension and platform steps, never a step itself.
  */
 type Step = 0 | 1 | 2 | 3 | 4 | 5
 
@@ -37,9 +38,11 @@ const EXTENSION_SOURCE = 'https://github.com/matthewdonsemail-lab/log/tree/main/
 export function OnboardingSteps({ requireSignIn = false }: { requireSignIn?: boolean }) {
   const navigate = useNavigate()
   const [authSource] = useState(readAuthSource)
+  const enabledPlatforms = getEnabledPlatforms()
+  const showExtensionStep = needsExtensionStep()
   // Landing arrivals carry a saved website and skip straight to the reveal
   // (the lookup runs on mount). Returning visitors with a saved brand resume
-  // at the extension step; sign-in returns land on platform selection.
+  // at the extension step (or platforms if extension is skipped); sign-in returns land on platform selection.
   const [step, setStep] = useState<Step>(() => {
     if (!requireSignIn && authSource) return 3
     if (readLandingWebsite().trim()) return 1
@@ -48,7 +51,8 @@ export function OnboardingSteps({ requireSignIn = false }: { requireSignIn?: boo
       if (progress === 'platforms') return 3
       if (progress === 'tokens') return 4
       if (progress === 'done') return 5
-      return 2
+      // Skip extension step if it's not needed
+      return showExtensionStep ? 2 : 3
     }
     return 0
   })
@@ -84,9 +88,12 @@ export function OnboardingSteps({ requireSignIn = false }: { requireSignIn?: boo
     if (revealLeaving) return
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     setRevealLeaving(true)
-    saveOnboardingProgress('extension')
+    // Skip extension step if it's not needed (Reddit-only deployments)
+    const nextStep = showExtensionStep ? 2 : 3
+    const nextProgress = showExtensionStep ? 'extension' : 'platforms'
+    saveOnboardingProgress(nextProgress)
     revealScrollRef.current?.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' })
-    leaveTimer.current = window.setTimeout(() => setStep(2), reduce ? 0 : 750)
+    leaveTimer.current = window.setTimeout(() => setStep(nextStep), reduce ? 0 : 750)
   }
 
   // Local-only debug skip: jump to any onboarding step. Stripped from
@@ -141,6 +148,13 @@ export function OnboardingSteps({ requireSignIn = false }: { requireSignIn?: boo
 
   function continueFromSources() {
     if (sources.length === 0) return
+    // If no platforms need tokens (Reddit-only), skip to ready
+    const needsTokens = sources.some(id => id === 'x' || id === 'facebook')
+    if (!needsTokens) {
+      saveOnboardingProgress('done')
+      setStep(5)
+      return
+    }
     if (requireSignIn) {
       saveAuthSource(sources[0])
       navigate('/sign-in')
@@ -308,7 +322,7 @@ export function OnboardingSteps({ requireSignIn = false }: { requireSignIn?: boo
             Pick the platforms you care about. We&apos;ll cluster what customers keep repeating.
           </p>
           <div className="mx-auto mt-8 flex w-full max-w-4xl flex-wrap justify-center gap-4">
-            {SOCIAL_ICONS.map((icon) => {
+            {SOCIAL_ICONS.filter(icon => enabledPlatforms.includes(icon.id as 'reddit' | 'x' | 'facebook')).map((icon) => {
               const active = sources.includes(icon.id)
               return (
                 <Button
